@@ -1,0 +1,165 @@
+'以下是SAP自动登录
+Function SAP_start_and_login(connection_string, use_sso, user, pass)
+    'WScript.Echo "executing function SAP_start_and_login()"
+    REM Variables!  Must declare before using because of Option Explicit
+    Dim WSHShell, SAPGUIPath
+    REM Main
+    Set WSHShell = WScript.CreateObject("WScript.Shell")
+    If IsObject(WSHShell) Then
+        REM Set the path to the SAP GUI directory
+        SAPGUIPath = "C:\Program Files (x86)\SAP\FrontEnd\SAPgui\"
+
+        REM Starts the SAP GUI
+        if use_sso then
+            WSHShell.Exec SAPGUIPath & "sapshcut.exe -client=321 -sysname=whatevah -gui=" & connection_string & " -snc_name={p:CN=SAP/KerberosAPP@EC.WIN.COLPAL.COM} -snc_qop={8}"
+        else
+            WSHShell.Exec SAPGUIPath & "sapshcut.exe -client=321 -sysname=whatevah -gui=" & connection_string & " -user=" & user & " -pw=" & pass 
+        end if
+        REM WSHShell.Exec SAPGUIPath & "saplogon.exe """ & system & """"
+        Set WSHShell = Nothing
+		WScript.Sleep 10
+        'WScript.Echo "{waiting for SAP to finish loading..}"
+        SAP_start_and_login = WaitForSAP(connection_string, 100)
+        WScript.Sleep 1000  
+    End If
+End Function
+'以上是SAP自动登录
+
+'----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+'以下是检查是否已开SAP窗口
+
+Function CheckSapIsRunning(connection_string)
+    Running = False
+    Ready = False
+
+    If Not IsObject(application) Then
+        On Error Resume Next
+        Set SapGuiAuto  = GetObject("SAPGUI")
+        If (Err.Number <> 0) Then
+            'WScript.Echo "SAPGUI object not found yet"
+            ' Error raised, object not found.
+            ' Restore normal error handling.
+            On Error GoTo 0
+        Else
+            'WScript.Echo "einai ok"
+            ' Object found.
+            ' Restore normal error handling.
+            On Error GoTo 0
+            Set application = SapGuiAuto.GetScriptingEngine
+            If application.Connections.Count() > 0 Then
+                For i = 0 To (application.Connections.Count()-1)
+                    REM WScript.Echo i
+                    Set Connection = application.Children(0+i)
+                    Conn = Connection.ConnectionString()
+                    REM WScript.Echo Conn
+                    If InStr(Conn, connection_string) Then
+                        Running = True
+                        Exit For
+                    End If
+                Next
+            End If
+            If Running Then
+                REM WScript.Echo connection_string + " is running!"
+                REM WScript.Echo "sessions="+CStr(connection.Children.Count)
+                If Not IsObject(session) Then
+                    if connection.Children.Count > 0 then
+                        Set session = connection.Children(0)
+                        If IsObject(WScript) Then
+                            WScript.ConnectObject session,     "on"
+                            WScript.ConnectObject application, "on"
+                        End If
+                        If not session.Busy then
+                            Ready=True
+                            REM WScript.Echo connection_string + " session is ready!"
+                            Dim sapWindow
+                            set sapWindow = session.findById("wnd[0]", False)
+                            if sapWindow is Nothing then
+                                WScript.Echo connection_string + " sap window element not there yet"
+                            else
+                                'WScript.Echo connection_string + " is loaded and visible!"
+                            end if
+                        Else
+                            'WScript.Echo connection_string + " session is busy!"
+                        end if
+                    else
+                        'WScript.Echo connection_string + " session not loaded yet!"
+                    end if
+                End If
+            else
+                'WScript.Echo connection_string + " not running!"
+            End If
+        End If
+    End If
+    REM WScript.Echo application.Connections.Count()
+    CheckSapIsRunning = Ready
+End Function
+
+'以上是检查是否已开SAP窗口
+
+'------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+'以下是登录SAP相关代码
+
+Function WaitForSAP(connection_string, timeout)
+    counter = 0
+    returnValue = False
+    While NOT CheckSapIsRunning(connection_string) AND counter < timeout
+        counter = counter + 1
+        WScript.Sleep 1000
+        REM WScript.Echo connection_string + " is not ready"
+    WEnd
+    if counter = timeout then
+        WScript.Echo "timeout of " + CStr(timeout) + " seconds reached."
+    else
+        returnValue = True
+    end if
+    WaitForSAP = returnValue
+End Function
+
+'以上是登录SAP相关代码
+
+'------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Dim use_sso
+use_sso=False
+Dim username
+username = "CNDEL13"
+Dim password
+password = "Abcd0816,"
+Dim connection_string
+connection_string = "/M/CAPapp00.esc.win.colpal.com/S/3600/G/Production Users"  '这是定义我打开的是CAP
+Call SAP_start_and_login(connection_string, use_sso, username, password)
+WScript.Sleep 3000
+If Not IsObject(application) Then
+   Set SapGuiAuto  = GetObject("SAPGUI")
+   Set application = SapGuiAuto.GetScriptingEngine
+End If
+If Not IsObject(connection) Then
+   Set connection = application.Children(0)
+End If
+If Not IsObject(session) Then
+   Set session    = connection.Children(0)
+End If
+If IsObject(WScript) Then
+   WScript.ConnectObject session,     "on"
+   WScript.ConnectObject application, "on"
+End If '这一段是录宏的时候默认出现的
+'msgbox(application.children.count)
+
+If application.children.count > 1 Then
+	'msgbox("7")
+	Set connection = application.Children(application.children.count-1)
+	' Do Until Not connection Is Nothing
+	' WScript.Sleep 10
+	' Loop
+	WScript.Sleep 8000
+	Set session    = connection.Children(0)
+	WScript.Sleep 1000
+    session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").select
+    session.findById("wnd[1]/usr/radMULTI_LOGON_OPT2").setFocus
+    session.findById("wnd[1]/tbar[0]/btn[0]").press
+End If  
+
+WScript.Sleep 12000
