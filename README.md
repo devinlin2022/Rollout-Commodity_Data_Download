@@ -9,3 +9,4 @@ Functions in app3.py:
 
 Functions in sapautologin.py
 1. sapautologin: Get the query sku, date, and quantity and submit to Google Sheets
+2. bomdata_download,find_marcdata,find_mbewdata,find_prdata,find_mb52,find_me2n: Get the specifc data from SAP Tables
