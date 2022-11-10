@@ -125,9 +125,9 @@ End Function
 Dim use_sso
 use_sso=False
 Dim username
-username = "CNDEL13"
+username = "xxxxx"
 Dim password
-password = "Abcd0816,"
+password = "xxxxx"
 Dim connection_string
 connection_string = "/M/CAPapp00.esc.win.colpal.com/S/3600/G/Production Users"  '这是定义我打开的是CAP
 Call SAP_start_and_login(connection_string, use_sso, username, password)
