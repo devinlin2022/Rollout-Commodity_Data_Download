@@ -3,8 +3,10 @@ This program is designed to enable Operation Efficiency team to check the daily 
 
 Functions in python_email.py:
 
-index(): Redirect to login page of the ECM Fast Tracking System
-login(): Validate the login credentials and direct to next page if credentials are correct, notice users failed to login in if credentials are wrong.
+getname(): Input the name of vbs script for SAP to run.
+editvbs(vbs_name,file1_name,script_name,combined_name): Process the vbs script by adding the content of "template.txt" to vbs script from getname function, and result returns as a name of completed vbs script.
+call(file1_name,combined_name): Call the SAP to run complated VBS script from editvbs function.
+dataupload(files,target_path): Process the data and save the data to the target folder.
 test(): Fetch the query data and process the input as dataframe, then call on sapautologin program
 Functions in sapautologin.py
 
