@@ -23,5 +23,6 @@ The address for AM Abnormal Record is [https://docs.google.com/spreadsheets/d/1q
 Attention:
 
 1.Json file is needed to run the code, the service account need to apply for access to the sheet, otherwise the code is not able to run.
+
 2.Please put Json file, TEXT, together with the code document in the same environment path of Python.exe.
 
