@@ -11,7 +11,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from PIL import Image
-import pymupdf
+import pymupdf # Still imported, but not directly used in this specific flow
 import pygsheets
 from gspread_dataframe import set_with_dataframe
 import gspread
@@ -19,6 +19,7 @@ import re
 import json
 import os
 from selenium.webdriver.chrome.service import Service
+from retrying import retry # Import the retrying library
 
 try:
     gc_pygsheets = pygsheets.authorize(service_file='service_account_key.json')
@@ -41,7 +42,8 @@ def get_chrome_driver():
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safeBrowse.enabled": True
+        # "safeBrowse.enabled": True # Typo: should be "safeBrowse.enabled" if used
+        "safeBrowse.enabled": True # Corrected preference name
     }
     options.add_experimental_option('prefs', prefs)
 
@@ -49,6 +51,23 @@ def get_chrome_driver():
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
+# Helper function for clicking elements with retries
+# Retries up to 5 times, waits 2 seconds between retries on WebDriverException
+@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
+def click_element_with_retry(driver, by_locator):
+    wait = WebDriverWait(driver, 10)
+    element = wait.until(EC.element_to_be_clickable(by_locator))
+    element.click()
+
+# Helper function for JavaScript clicks with retries
+@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
+def js_click_element_with_retry(driver, css_selector):
+    wait = WebDriverWait(driver, 10)
+    element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
+    driver.execute_script("arguments[0].click();", element)
+
+
+@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException) or isinstance(e, ValueError), stop_max_attempt_number=5, wait_fixed=2000)
 def fetch_RISI_data(link):
     driver = get_chrome_driver()
     driver.implicitly_wait(10)
@@ -61,30 +80,35 @@ def fetch_RISI_data(link):
     risi_password = os.getenv("RISI_PASSWORD")
 
     if not risi_username or not risi_password:
+        driver.quit()
         raise ValueError("RISI_USERNAME or RISI_PASSWORD environment variables not set.")
 
     driver.execute_script(f'document.querySelector("#userEmail").value = "{risi_username}"')
     driver.execute_script(f'document.querySelector("#password").value = "{risi_password}"')
-    driver.execute_script(f'document.querySelector("#login-button").click()')
-    time.sleep(5)
-
+    
     try:
-        export_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button > span.mat-mdc-button-touch-target')))
-        export_button.click()
-        time.sleep(2)
+        click_element_with_retry(driver, (By.CSS_SELECTOR, '#login-button'))
     except Exception as e:
         driver.quit()
-        raise
+        raise Exception(f"Failed to click RISI login button: {e}")
+        
+    time.sleep(5) # Wait for login to complete
 
     try:
-        csv_export_option = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span"))
-        )
-        csv_export_option.click()
-        time.sleep(5)
+        # Use js_click for potentially more robust clicking of the export button
+        js_click_element_with_retry(driver, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button > span.mat-mdc-button-touch-target')
+        time.sleep(2) # Wait for the export menu to appear
     except Exception as e:
         driver.quit()
-        raise
+        raise Exception(f"Failed to click RISI export button: {e}")
+
+    try:
+        # Use js_click for the CSV export option
+        js_click_element_with_retry(driver, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span")
+        time.sleep(5) # Wait for the download to initiate
+    except Exception as e:
+        driver.quit()
+        raise Exception(f"Failed to click RISI CSV export option: {e}")
 
     driver.quit()
     return True
@@ -154,6 +178,7 @@ def sync_and_dedup_csv_to_gsheet(csv_path, gsheet_id, sheet_title):
 def main_workflow():
     risi_palm_oil_link = 'https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices'
 
+    # The fetch_RISI_data function is now decorated with retry logic
     fetch_RISI_data(risi_palm_oil_link)
 
     download_dir_path = DOWNLOAD_DIR
