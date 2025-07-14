@@ -1,27 +1,20 @@
 import time
 import pandas as pd
-import requests # Used for ImageService in other contexts, but keeping it for consistency if it's shared.
-from datetime import datetime
+import requests # Keeping this as it's general purpose
+import re # Keeping this as it's general purpose
+import json # Keeping this as it's general purpose
+import os
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-# from PIL import Image # Not used in this specific script's flow
-# import pymupdf # Not used in this specific script's flow
-import pygsheets
-from gspread_dataframe import set_with_dataframe
-import gspread
-import re # Not strictly used in this specific script's flow, but often handy
-import json # Not strictly used in this specific script's flow, but often handy
-import os
 from selenium.webdriver.chrome.service import Service
-from retrying import retry # Import the retrying library
+from retrying import retry
 
-# --- Google Sheets Authentication (using service account from file) ---
+# --- Google Sheets Authentication ---
 try:
-    # 'service_account_key.json' is created by GitHub Actions from a secret
     gc_pygsheets = pygsheets.authorize(service_file='service_account_key.json')
     gc_gspread = gspread.service_account(filename='service_account_key.json')
     print("Google Sheets authenticated using service account.")
@@ -29,22 +22,23 @@ except Exception as e:
     print(f"Error authenticating with Google Sheets service account: {e}")
     raise Exception("Google Sheets authentication failed. Check service account key.")
 
-# --- Define ChromeDriver Path and Download Directory ---
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
 DOWNLOAD_DIR = "/tmp/downloads" # Standard writable temp directory for GitHub Actions
-os.makedirs(DOWNLOAD_DIR, exist_ok=True) # Ensure the directory exists
+os.makedirs(DOWNLOAD_DIR, exist_ok=True) # Create the directory if it doesn't exist
+
+# A dictionary to store download details for CDP monitoring
+# It will map download ID to its state (e.g., "in_progress", "completed", "failed") and filename
+DOWNLOAD_TRACKER = {}
 
 def get_chrome_driver():
-    """Initializes and returns a Selenium Chrome WebDriver configured for headless download."""
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu') # Essential for headless on Linux
+    options.add_argument('--disable-gpu')
     options.add_experimental_option("excludeSwitches", ["enable-logging"]) # Suppress verbose logging
     options.add_argument('--log-level=3') # Suppress informational messages
 
-    # Configure download preferences
     prefs = {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
@@ -57,7 +51,18 @@ def get_chrome_driver():
     driver = webdriver.Chrome(service=service, options=options)
 
     # Enable downloads in headless mode via Chrome DevTools Protocol (CDP)
+    # This is crucial for reliable headless downloads
     driver.execute_cdp_cmd('Page.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': DOWNLOAD_DIR})
+
+    # Listen to download progress events for robust monitoring
+    # This part sets up a listener for download events.
+    # We will reset the DOWNLOAD_TRACKER before each download attempt.
+    client = driver.service.get_session()._ws # Access the websocket client
+    # The listener needs to be outside get_chrome_driver if you want to track across driver instances
+    # But for a single download per fetch_RISI_data, it's fine here.
+    
+    # We don't have direct access to add_listener in headless chrome, so we poll the status
+    # Instead of an event listener, we will poll the download status from CDP after initiating download.
 
     return driver
 
@@ -65,26 +70,25 @@ def get_chrome_driver():
 @retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
 def click_element_with_retry(driver, by_locator):
     print(f"Attempting to click element: {by_locator}")
-    wait = WebDriverWait(driver, 15) # Increased wait time for clickability
+    wait = WebDriverWait(driver, 15)
     element = wait.until(EC.element_to_be_clickable(by_locator))
     element.click()
     print(f"Clicked element: {by_locator}")
 
-# Helper function for JavaScript clicks with retries (useful if native click fails)
+# Helper function for JavaScript clicks with retries
 @retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
 def js_click_element_with_retry(driver, css_selector):
     print(f"Attempting to JS click element: {css_selector}")
-    wait = WebDriverWait(driver, 15) # Increased wait time for presence
+    wait = WebDriverWait(driver, 15)
     element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
     driver.execute_script("arguments[0].click();", element)
     print(f"JS Clicked element: {css_selector}")
 
-# Removed save_pdf and pdf_to_img functions as they are not used in this script's flow.
 
+@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException) or isinstance(e, ValueError), stop_max_attempt_number=5, wait_fixed=2000)
 def fetch_RISI_data(link):
     """
-    Fetches data from a RISI link by logging in, simulating clicks to download a CSV,
-    and then closing the driver.
+    Fetches data from RISI by logging in, simulating clicks to trigger CSV download.
     """
     print(f"Attempting to fetch RISI data from: {link}")
     driver = get_chrome_driver()
@@ -95,7 +99,6 @@ def fetch_RISI_data(link):
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail')))
     print("Login page elements visible.")
 
-    # Retrieve RISI credentials from environment variables (GitHub Secrets)
     risi_username = os.getenv("RISI_USERNAME")
     risi_password = os.getenv("RISI_PASSWORD")
 
@@ -114,14 +117,13 @@ def fetch_RISI_data(link):
         driver.quit()
         raise Exception(f"Failed to click RISI login button: {e}")
         
-    time.sleep(7) # Increased wait for page load after login
+    time.sleep(7) # Wait for page load after login
 
-    # Check for potential 2FA or redirection (as seen in previous tracebacks)
+    # Check for potential 2FA or redirection
     current_url = driver.current_url
     if "login" in current_url.lower() and "success" not in current_url.lower():
         print(f"Still on login page after initial login attempt, current URL: {current_url}")
         try:
-            # Attempt to click a 'continue login' button if it appears
             continue_button_selector = '#continue-login-button'
             wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, continue_button_selector)))
             js_click_element_with_retry(driver, continue_button_selector)
@@ -143,48 +145,103 @@ def fetch_RISI_data(link):
         driver.quit()
         raise Exception(f"Failed to click RISI export button: {e}")
 
+    # Reset download tracker for this specific download
+    global DOWNLOAD_TRACKER
+    DOWNLOAD_TRACKER = {} # Clear previous download state
+
     # Click the "Export CSV" option
     csv_export_selector = "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span"
     try:
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, csv_export_selector)))
         js_click_element_with_retry(driver, csv_export_selector) # Use JS click for robustness
-        time.sleep(10) # Increased wait for the download to initiate and start writing
-        print("CSV export option clicked. Waiting for download to start.")
+        # No time.sleep here, as wait_for_download_completion will handle timing
+        print("CSV export option clicked. Now monitoring download status.")
     except Exception as e:
         driver.quit()
         raise Exception(f"Failed to click RISI CSV export option: {e}")
 
-    driver.quit()
-    print("Driver closed.")
-    return True # Indicates that the download process was initiated
+    # Return the driver for the download monitoring part to pick up
+    return driver
 
-def wait_file_and_rename(download_dir, old_ext, new_filename, timeout=120):
+def wait_for_download_completion(driver, timeout=120):
     """
-    Waits for a file with a specific extension to appear in the download directory,
-    then renames it. Includes retry logic for renaming if file is still busy.
+    Monitors Chrome DevTools Protocol to wait for download completion.
+    Returns the path to the completed download file.
     """
-    print(f"Waiting for file with extension '{old_ext}' in '{download_dir}' for {timeout} seconds...")
-    time_counter = 0
-    while time_counter < timeout:
-        files = [f for f in os.listdir(download_dir) if f.endswith(old_ext) and not f.endswith(".crdownload")]
-        if files:
-            # Sort by modification time to get the newest file (useful if multiple downloads occur)
-            files.sort(key=lambda x: os.path.getmtime(os.path.join(download_dir, x)), reverse=True)
-            old_file = os.path.join(download_dir, files[0])
-            new_file = os.path.join(download_dir, new_filename)
-            try:
-                os.rename(old_file, new_file)
-                print(f"File '{old_file}' renamed to '{new_file}'.")
-                return new_file
-            except OSError as e:
-                # This can happen if the file is still being written to by Chrome, retry
-                print(f"Error renaming file {old_file}: {e}. Retrying in 1 second.")
-                time.sleep(1)
+    start_time = time.time()
+    last_known_file = None
+    
+    # Enable Fetch domain to listen for network requests (optional, but can provide more info)
+    # driver.execute_cdp_cmd('Fetch.enable', {}) 
+
+    # List files in download directory to find initial .crdownload file
+    print(f"Monitoring download directory: {DOWNLOAD_DIR}")
+    
+    # We will poll the download status via CDP
+    # Get the current list of downloads
+    downloads_info = driver.execute_cdp_cmd('Browser.getDownloads', {})
+    initial_downloads_count = len(downloads_info['items'])
+    
+    # Wait for a new download item to appear
+    current_downloads_count = initial_downloads_count
+    while current_downloads_count == initial_downloads_count and (time.time() - start_time < timeout / 2):
         time.sleep(1)
-        time_counter += 1
-        if time_counter % 10 == 0:
-            print(f"Still waiting... {time_counter} seconds elapsed. Files in dir: {os.listdir(download_dir)}")
-    raise Exception(f"Download file with extension '{old_ext}' not found in '{download_dir}' within {timeout} seconds!")
+        downloads_info = driver.execute_cdp_cmd('Browser.getDownloads', {})
+        current_downloads_count = len(downloads_info['items'])
+        print(f"Waiting for new download: {current_downloads_count} items found (initial: {initial_downloads_count})")
+
+    if current_downloads_count == initial_downloads_count:
+        raise Exception(f"Download did not start in {timeout / 2} seconds.")
+
+    # Now, try to find the *new* download item and monitor it
+    new_download_item = None
+    for item in downloads_info['items']:
+        if item['state'] == 'inProgress' and not item['id'] in DOWNLOAD_TRACKER: # Check if this is a newly found in-progress download
+             new_download_item = item
+             DOWNLOAD_TRACKER[item['id']] = 'inProgress' # Mark as tracked
+             break
+
+    if not new_download_item:
+        # If no new inProgress item found, check for a 'completed' one that might have finished quickly
+        for item in downloads_info['items']:
+            if item['state'] == 'completed' and not item['id'] in DOWNLOAD_TRACKER:
+                print(f"Download completed very quickly: {item['filePath']}")
+                DOWNLOAD_TRACKER[item['id']] = 'completed'
+                return item['filePath']
+        raise Exception("New download item not identified or already completed before tracking.")
+
+
+    print(f"Found new download item with ID: {new_download_item['id']}")
+
+    while (time.time() - start_time < timeout):
+        downloads_info = driver.execute_cdp_cmd('Browser.getDownloads', {})
+        
+        found_item = None
+        for item in downloads_info['items']:
+            if item['id'] == new_download_item['id']: # Find the specific download we're tracking
+                found_item = item
+                break
+        
+        if found_item:
+            print(f"Download status: {found_item['state']}, Progress: {found_item['receivedBytes']}/{found_item['totalBytes']} Bytes, File: {found_item['filePath']}")
+            if found_item['state'] == 'completed':
+                print(f"Download with ID {found_item['id']} COMPLETED. Path: {found_item['filePath']}")
+                DOWNLOAD_TRACKER[found_item['id']] = 'completed'
+                return found_item['filePath']
+            elif found_item['state'] == 'interrupted':
+                DOWNLOAD_TRACKER[found_item['id']] = 'failed'
+                raise Exception(f"Download with ID {found_item['id']} was INTERRUPTED: {found_item.get('dangerType', 'Unknown')}")
+            
+            # Update last_known_file if it's progressing
+            last_known_file = found_item['filePath']
+
+        time.sleep(1) # Check status every second
+    
+    # If timeout reached
+    if last_known_file:
+        raise Exception(f"Download of '{last_known_file}' did not complete within {timeout} seconds. Current state: {found_item.get('state', 'Unknown')}")
+    else:
+        raise Exception(f"No active download found or completed within {timeout} seconds.")
 
 def clean_palm_csv(input_path, output_path):
     """
@@ -287,15 +344,39 @@ def main_workflow():
     risi_palm_oil_link = 'https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices'
 
     print("Starting fetch_RISI_data (CSV download initiation)...")
-    fetch_RISI_data(risi_palm_oil_link)
-    print("fetch_RISI_data completed (download initiated).")
-
+    # fetch_RISI_data now returns the driver object, which is needed for download monitoring
+    driver_after_clicks = fetch_RISI_data(risi_palm_oil_link)
+    
     download_dir_path = DOWNLOAD_DIR
     new_filename = "Palm_original.csv"
     
-    # This is the line that failed previously. Increased timeout to 120s and added robustness.
-    downloaded_file_path = wait_file_and_rename(download_dir_path, ".csv", new_filename)
-    print(f"Download and renamed as: {downloaded_file_path}")
+    # Use the new CDP-based download monitoring
+    try:
+        downloaded_file_path = wait_for_download_completion(driver_after_clicks, timeout=180) # Increased timeout
+        print(f"Download completed: {downloaded_file_path}")
+        
+        # Rename the downloaded file to the desired new_filename
+        final_file_path = os.path.join(download_dir_path, new_filename)
+        # Ensure the downloaded file is moved/renamed to the clean name
+        # If the downloaded_file_path is already the clean name (Chrome often names it directly),
+        # this rename will just confirm. If it's a temp name, it will rename it.
+        if downloaded_file_path != final_file_path:
+            try:
+                os.rename(downloaded_file_path, final_file_path)
+                print(f"Renamed downloaded file to: {final_file_path}")
+                downloaded_file_path = final_file_path # Update path for cleaning
+            except OSError as e:
+                print(f"Could not rename downloaded file {downloaded_file_path} to {final_file_path}: {e}")
+                # Proceed with original path if rename fails, cleaning will handle it
+                downloaded_file_path = downloaded_file_path # Use the path returned by CDP
+
+    except Exception as e:
+        print(f"Download process failed: {e}")
+        driver_after_clicks.quit() # Ensure driver is closed on failure
+        raise # Re-raise the exception to fail the workflow
+
+    driver_after_clicks.quit() # Close the driver after download is confirmed and file is ready
+    print("Driver closed after download.")
 
     cleaned_filename = "Palm_cleaned.csv"
     cleaned_file_path = os.path.join(download_dir_path, cleaned_filename)
@@ -308,11 +389,12 @@ def main_workflow():
         csv_path=cleaned_file_path,
         gsheet_id=gsheet_id,
         sheet_title=sheet_title
-        # service_account_json parameter is no longer needed as authentication is global
     )
     print("RISI Palm Oil workflow completed successfully.")
 
 if __name__ == "__main__":
+    # Apply retry to the main workflow execution
+    @retry(stop_max_attempt_number=5, wait_fixed=5000) # Retry 5 times, 5 seconds between retries
     def run_main_workflow_with_retries():
         main_workflow()
 
