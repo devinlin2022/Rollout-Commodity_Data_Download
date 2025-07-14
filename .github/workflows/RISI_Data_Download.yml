@@ -2,48 +2,55 @@ name: RISI Palm Oil Data Automation
 
 on:
   schedule:
-    - cron: '30 0 * * *'
-  workflow_dispatch:
+    - cron: '30 0 * * *' # Runs daily at 00:30 UTC
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
 
 jobs:
   run_risi_script:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Action to check out your repository code
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.9' # Or your desired Python version (e.g., '3.10', '3.11')
 
       - name: Install system dependencies for Chrome and Selenium
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+          sudo apt-get install -y chromium-browser chromium-chromedriver # Installs Chromium and its driver
 
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          # Removed pymupdf and Pillow as they are no longer used
-          pip install pygsheets pandas requests selenium gspread gspread-dataframe retrying
+          # Removed google-colab-selenium, pymupdf, Pillow as they are not used in this specific script's flow
+          pip install pygsheets retrying pandas requests selenium gspread gspread-dataframe
 
-      # Removed temporary download directory creation as direct extraction is used
-      # - name: Create temporary download directory
-      #   run: |
-      #     mkdir -p /tmp/downloads
+      - name: Create temporary download directory
+        run: |
+          mkdir -p /tmp/downloads # Ensure this matches DOWNLOAD_DIR in your Python script
 
       - name: Create Google Service Account key file
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         run: |
           echo "$GCP_SA_KEY" > service_account_key.json
+        # IMPORTANT: This creates the file only during the workflow run.
+        # It's NOT committed to your repository.
 
-      - name: Run RISI Palm Oil Python script
+      - name: Run Python script
         env:
+          # Set RISI login credentials from GitHub Secrets
           RISI_USERNAME: ${{ secrets.RISI_USERNAME }}
           RISI_PASSWORD: ${{ secrets.RISI_PASSWORD }}
+          # Set the CHROMEDRIVER_PATH.
           CHROMEDRIVER_PATH: /usr/bin/chromedriver
+          # DASHSCOPE_API_KEY and ICIS credentials are not needed for this specific RISI_data_download.py script
+          # If other scripts/workflows use them, they would be defined there.
         run: |
+          # Execute your main script.
+          # Ensure this path is correct if your Python file is in a subfolder.
           python RISI_data_download.py
