@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from retrying import retry
+import pygsheets
 
 # --- Google Sheets Authentication ---
 try:
