@@ -1,4 +1,4 @@
-name: Run Google Sheets Automation
+name: ICIS_Data_Download
 
 on:
   # Schedule the workflow to run daily at 00:00 UTC
