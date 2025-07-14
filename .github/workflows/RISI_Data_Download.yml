@@ -38,8 +38,6 @@ jobs:
           GCP_SA_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         run: |
           echo "$GCP_SA_KEY" > service_account_key.json
-        # IMPORTANT: This creates the file only during the workflow run.
-        # It's NOT committed to your repository.
 
       - name: Run Python script
         env:
