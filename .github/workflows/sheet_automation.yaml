@@ -1,0 +1,53 @@
+name: Run Google Sheets Automation
+
+on:
+  # Schedule the workflow to run daily at 00:00 UTC
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+  # Allow manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  run_script:
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # Action to check out your repository code
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # Or your desired Python version (e.g., '3.10', '3.11')
+
+      - name: Install system dependencies for Chrome and Selenium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver # Installs Chromium and its driver
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pygsheets google-colab-selenium retrying PyMuPDF==1.24.9 fitz==1.16.14 pandas requests selenium Pillow gspread gspread-dataframe
+
+      - name: Create service account key file
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        run: |
+          echo "$GCP_SA_KEY" > service_account_key.json
+        # IMPORTANT: This creates the file only during the workflow run.
+        # It's NOT committed to your repository.
+
+      - name: Run Python script
+        env:
+          # Set your API key from GitHub Secrets
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          # Set the CHROMEDRIVER_PATH.
+          # For chromium-chromedriver installed via apt-get, the path is often /usr/bin/chromedriver
+          CHROMEDRIVER_PATH: /usr/bin/chromedriver
+        run: |
+          # Execute your main script.
+          # Ensure your Python script (sheet_automation.py) is in the root of your repo
+          # and updated to use environment variables for keys and a service account file
+          # for Google Sheets authentication, and correctly points to the chromedriver.
+          python sheet_automation.py
