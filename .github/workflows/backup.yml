@@ -1,0 +1,50 @@
+name: backup
+
+on:
+  schedule:
+    - cron: '15 12  * * *'
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    env:
+      ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+      ID_TOKEN: ${{ secrets.ID_TOKEN }}
+      REMOTE_BRANCH: main
+
+    steps:
+      - name: Setup repository
+        uses: actions/checkout@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '16'
+
+      - name: Install Clasp
+        run: npm install -g @google/clasp
+
+      - name: Install jq
+        run: |-
+          sudo apt update -y
+          sudo apt install jq -y
+
+      - name: Setup Logins
+        run: bash setup.sh
+
+      - name: Clone Scripts
+        run: bash clone.sh
+
+      - name: Update Progress
+        run: |
+          if [ $(git status --porcelain=v1 2>/dev/null | wc -l) != "0" ] ; then
+            git config user.name "GitHub Actions"
+            git config user.email noreply@github.com
+            git add .
+            git commit -m "github-actions: took backup"
+            git push origin main --force
+          fi
