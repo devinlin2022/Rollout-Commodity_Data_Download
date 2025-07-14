@@ -1,12 +1,8 @@
-name: backup
+name: Backup
 
 on:
   schedule:
-    # Runs at 12:15 HKT (UTC+8) which is 04:15 UTC. Adjust cron accordingly.
-    # The cron schedule is in UTC. '15 12 * * *' runs at 12:15 UTC.
-    - cron: '15 4 * * *'
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    - cron: '0 0 * * *'
 
 jobs:
   backup:
@@ -18,7 +14,7 @@ jobs:
       CLIENT_ID: ${{ secrets.CLIENT_ID }}
       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
       ID_TOKEN: ${{ secrets.ID_TOKEN }}
-      REMOTE_BRANCH: main
+      REMOTE_BRANCH: master
 
     steps:
       - name: Setup repository
@@ -27,7 +23,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v1
         with:
-          node-version: '16'
+          node-version: '12'
 
       - name: Install Clasp
         run: npm install -g @google/clasp
@@ -50,5 +46,5 @@ jobs:
             git config user.email noreply@github.com
             git add .
             git commit -m "github-actions: took backup"
-            git push origin main --force
+            git push origin master --force
           fi
