@@ -1,4 +1,4 @@
-name: ICIS_Data_Download
+name: ICIS Data Download
 
 on:
   # Schedule the workflow to run daily at 00:00 UTC
@@ -28,7 +28,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install pygsheets google-colab-selenium retrying pandas requests selenium Pillow gspread gspread-dataframe
+          # Removed google-colab-selenium as it's not needed for GitHub Actions
+          pip install pygsheets retrying pandas requests selenium Pillow gspread gspread-dataframe pymupdf
+
+      - name: Create temporary downloads directory
+        run: |
+          mkdir -p /tmp/downloads # Ensure this matches DOWNLOAD_DIR in your Python script
 
       - name: Create service account key file
         env:
@@ -40,14 +45,17 @@ jobs:
 
       - name: Run Python script
         env:
-          # Set your API key from GitHub Secrets
+          # Set your API key from GitHub Secrets for ImageService
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           # Set the CHROMEDRIVER_PATH.
-          # For chromium-chromedriver installed via apt-get, the path is often /usr/bin/chromedriver
           CHROMEDRIVER_PATH: /usr/bin/chromedriver
+          # Set ICIS login credentials from GitHub Secrets
+          ICIS_USERNAME: ${{ secrets.ICIS_USERNAME }}
+          ICIS_PASSWORD: ${{ secrets.ICIS_PASSWORD }}
+          # Set RISI login credentials from GitHub Secrets (used in risi_main fallback)
+          RISI_USERNAME: ${{ secrets.RISI_USERNAME }}
+          RISI_PASSWORD: ${{ secrets.RISI_PASSWORD }}
         run: |
           # Execute your main script.
-          # Ensure your Python script (sheet_automation.py) is in the root of your repo
-          # and updated to use environment variables for keys and a service account file
-          # for Google Sheets authentication, and correctly points to the chromedriver.
-          python sheet_automation.py
+          # Ensure this path is correct if your Python file is in a subfolder.
+          python ICIS_Data_Download.py
