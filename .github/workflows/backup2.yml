@@ -2,7 +2,11 @@ name: backup
 
 on:
   schedule:
-    - cron: '15 12  * * *'
+    # Runs at 12:15 HKT (UTC+8) which is 04:15 UTC. Adjust cron accordingly.
+    # The cron schedule is in UTC. '15 12 * * *' runs at 12:15 UTC.
+    - cron: '15 4 * * *'
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   backup:
