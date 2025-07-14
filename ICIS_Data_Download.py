@@ -385,7 +385,6 @@ def risi_main():
 
         update_google_sheet_from_csv(csv_path, sheet_id, sheet_name)
 
-@retry(stop_max_attempt_number=5, wait_fixed=5000) # Retry the main function 5 times with 5-second delay
 def main(id, tab_name):
     sh = gc_pygsheets.open_by_key(id)
     wks = sh.worksheet_by_title(tab_name)
