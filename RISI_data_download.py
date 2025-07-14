@@ -13,7 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from retrying import retry
 import pygsheets
-
+import gspread
 # --- Google Sheets Authentication ---
 try:
     gc_pygsheets = pygsheets.authorize(service_file='service_account_key.json')
