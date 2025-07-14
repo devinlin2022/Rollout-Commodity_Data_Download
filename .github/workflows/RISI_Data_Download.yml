@@ -1,4 +1,4 @@
-name: RISI Data Automation
+name: RISI Palm Oil Data Automation
 
 on:
   schedule:
@@ -26,11 +26,13 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install pygsheets pandas requests selenium Pillow pymupdf gspread gspread-dataframe retrying # Added retrying here
+          # Removed pymupdf and Pillow as they are no longer used
+          pip install pygsheets pandas requests selenium gspread gspread-dataframe retrying
 
-      - name: Create temporary download directory
-        run: |
-          mkdir -p /tmp/downloads
+      # Removed temporary download directory creation as direct extraction is used
+      # - name: Create temporary download directory
+      #   run: |
+      #     mkdir -p /tmp/downloads
 
       - name: Create Google Service Account key file
         env:
