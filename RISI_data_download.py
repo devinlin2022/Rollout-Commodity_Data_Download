@@ -31,7 +31,9 @@ def get_chrome_driver():
     
     # Removed download preferences and CDP download commands as we are no longer downloading files
     
-    service = Service(executable_path=CHROMEDRATEDRIVER_PATH)
+    # === FIX START ===
+    service = Service(executable_path=CHROMEDRIVER_PATH) 
+    # === FIX END ===
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
@@ -39,7 +41,7 @@ def get_chrome_driver():
 @retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
 def click_element_with_retry(driver, by_locator):
     print(f"Attempting to click element: {by_locator}")
-    wait = WebDriverWait(driver, 15)
+    wait = WebDriverWait(driver, 15) # Increased wait time for clickability
     element = wait.until(EC.element_to_be_clickable(by_locator))
     element.click()
     print(f"Clicked element: {by_locator}")
@@ -48,7 +50,7 @@ def click_element_with_retry(driver, by_locator):
 @retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException), stop_max_attempt_number=5, wait_fixed=2000)
 def js_click_element_with_retry(driver, css_selector):
     print(f"Attempting to JS click element: {css_selector}")
-    wait = WebDriverWait(driver, 15)
+    wait = WebDriverWait(driver, 15) # Increased wait time for presence
     element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
     driver.execute_script("arguments[0].click();", element)
     print(f"JS Clicked element: {css_selector}")
@@ -65,7 +67,7 @@ def fetch_RISI_data(link):
     driver.implicitly_wait(10)
     driver.get(link)
 
-    wait = WebDriverWait(driver, 100)
+    wait = WebDriverWait(driver, 100) # Increased initial wait
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail')))
     print("Login page elements visible.")
 
@@ -113,7 +115,6 @@ def fetch_RISI_data(link):
 
     # Extract table headers
     headers = []
-    # COMMON PLACEHOLDER - Adjust this if headers are in a different place (e.g., first row of tbody)
     header_elements_selector = f'{table_selector} thead th'
     try:
         header_elements = driver.find_elements(By.CSS_SELECTOR, header_elements_selector)
