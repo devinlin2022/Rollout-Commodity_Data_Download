@@ -44,4 +44,4 @@ jobs:
           RISI_PASSWORD: ${{ secrets.RISI_PASSWORD }}
           CHROMEDRIVER_PATH: /usr/bin/chromedriver
         run: |
-          python RISI_Data_Download.py
+          python RISI_data_download.py
