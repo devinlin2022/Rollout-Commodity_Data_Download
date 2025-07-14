@@ -81,7 +81,6 @@ def js_click_element_with_retry(driver, css_selector):
 
 # Removed save_pdf and pdf_to_img functions as they are not used in this script's flow.
 
-@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException) or isinstance(e, ValueError), stop_max_attempt_number=5, wait_fixed=2000)
 def fetch_RISI_data(link):
     """
     Fetches data from a RISI link by logging in, simulating clicks to download a CSV,
