@@ -2,15 +2,15 @@ name: RISI Palm Oil Data Automation
 
 on:
   schedule:
-    - cron: '30 0 * * *' # 每天 00:30 UTC 运行
-  workflow_dispatch: # 允许在 GitHub Actions 标签页手动触发
+    - cron: '30 0 * * *'
+  workflow_dispatch:
 
 jobs:
   run_risi_script:
     runs-on: ubuntu-latest
 
     steps:
-      - name:  checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -18,10 +18,10 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Google Chrome
+      - name: Install chromedriver
         run: |
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          sudo apt-get install -y chromium-browser chromium-chromedriver
 
       - name: Install Python dependencies
         run: |
@@ -30,23 +30,18 @@ jobs:
 
       - name: Create temporary download directory
         run: |
-          # 确保这个路径与 Python 脚本中的 DOWNLOAD_DIR 变量完全一致
           mkdir -p /tmp/downloads
 
       - name: Create Google Service Account key file
         env:
-          # `GCP_SERVICE_ACCOUNT_KEY` 是您需要在 GitHub 仓库 "Settings > Secrets and variables > Actions" 中设置的 Secret 名称
           GCP_SA_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         run: |
-          # 这会创建一个 service_account_key.json 文件，Python 脚本将使用它进行认证
           echo "$GCP_SA_KEY" > service_account_key.json
 
       - name: Run Python script
         env:
-          # 设置 RISI 登录凭证，请确保在 GitHub Secrets 中设置了 RISI_USERNAME 和 RISI_PASSWORD
           RISI_USERNAME: ${{ secrets.RISI_USERNAME }}
           RISI_PASSWORD: ${{ secrets.RISI_PASSWORD }}
-          # 为 Python 脚本提供 Chromedriver 的路径
-          CHROMEDRIVER_PATH: /usr/bin/google-chrome
+          CHROMEDRIVER_PATH: /usr/bin/chromedriver
         run: |
           python RISI_data_download.py
