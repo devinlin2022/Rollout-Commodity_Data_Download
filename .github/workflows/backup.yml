@@ -2,19 +2,11 @@ name: backup
 
 on:
   schedule:
-    # Runs at 12:15 HKT (UTC+8) which is 04:15 UTC. Adjust cron accordingly.
-    # The cron schedule is in UTC. '15 12 * * *' runs at 12:15 UTC.
-    - cron: '15 4 * * *'
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    - cron: '15 12  * * *'
 
 jobs:
   backup:
     runs-on: ubuntu-latest
-    
-    # Grant permissions for the GITHUB_TOKEN to push to the repository
-    permissions:
-      contents: write
 
     env:
       ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
@@ -22,66 +14,37 @@ jobs:
       CLIENT_ID: ${{ secrets.CLIENT_ID }}
       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
       ID_TOKEN: ${{ secrets.ID_TOKEN }}
+      REMOTE_BRANCH: main
 
     steps:
-      - name: 1. Checkout repository
-        uses: actions/checkout@v4
-        with:
-          # This is necessary to have a branch to push to
-          ref: main
+      - name: Setup repository
+        uses: actions/checkout@v2
 
-      - name: 2. Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v1
         with:
-          node-version: '20' # Using a more current LTS version of Node.js
+          node-version: '16'
 
-      - name: 3. Install Clasp
+      - name: Install Clasp
         run: npm install -g @google/clasp
 
-      - name: 4. Install jq
-        run: sudo apt-get install -y jq
+      - name: Install jq
+        run: |-
+          sudo apt update -y
+          sudo apt install jq -y
 
-      - name: 5. Setup Clasp Credentials
-        # It's better to create the .clasprc.json file directly
-        # instead of using a shell script for clarity and security.
+      - name: Setup Logins
+        run: bash setup.sh
+
+      - name: Clone Scripts
+        run: bash clone.sh
+
+      - name: Update Progress
         run: |
-          echo '{
-            "token": {
-              "access_token": "${{ env.ACCESS_TOKEN }}",
-              "refresh_token": "${{ env.REFRESH_TOKEN }}",
-              "scope": "https://www.googleapis.com/auth/script.projects https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/logging.read",
-              "token_type": "Bearer",
-              "expiry_date": 1673850000000
-            },
-            "oauth2ClientSettings": {
-              "clientId": "${{ env.CLIENT_ID }}",
-              "clientSecret": "${{ env.CLIENT_SECRET }}",
-              "redirectUri": "http://localhost"
-            }
-          }' > ~/.clasprc.json
-      
-      - name: 6. Clone Apps Script Projects
-        # Assumes you have a script to handle the cloning logic,
-        # for example, reading script IDs from a file and calling 'clasp clone'.
-        # Replace this with your actual clone logic.
-        run: |
-          # Example: clasp clone <YOUR_SCRIPT_ID> --rootDir ./src
-          echo "Cloning scripts..."
-          # Your 'clone.sh' logic goes here.
-          # For example:
-          # cat script_ids.txt | xargs -n 1 clasp clone
-          
-      - name: 7. Commit and Push Changes
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Check if there are any changes to commit
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Changes detected. Committing and pushing..."
+          if [ $(git status --porcelain=v1 2>/dev/null | wc -l) != "0" ] ; then
+            git config user.name "GitHub Actions"
+            git config user.email noreply@github.com
             git add .
-            git commit -m "chore: backup Apps Script projects"
-            git push
-          else
-            echo "No changes to commit."
+            git commit -m "github-actions: took backup"
+            git push origin main --force
           fi
