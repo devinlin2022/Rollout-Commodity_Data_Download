@@ -55,8 +55,6 @@ def js_click_element_with_retry(driver, css_selector):
     driver.execute_script("arguments[0].click();", element)
     print(f"JS Clicked element: {css_selector}")
 
-
-@retry(retry_on_exception=lambda e: isinstance(e, EC.WebDriverException) or isinstance(e, ValueError), stop_max_attempt_number=5, wait_fixed=2000)
 def fetch_RISI_data(link):
     """
     Fetches data from RISI by logging in, navigating, and directly extracting
