@@ -1,0 +1,54 @@
+name: RISI Palm Oil Data Automation
+
+on:
+  # Schedule to run daily at 00:30 UTC
+  schedule:
+    - cron: '30 0 * * *'
+  # Allow manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  run_risi_script:
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # Action to check out your repository code
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # Specify your desired Python version
+
+      - name: Install system dependencies for Chrome and Selenium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver # Installs Chromium and its driver
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pygsheets pandas requests selenium Pillow pymupdf gspread gspread-dataframe
+
+      - name: Create temporary download directory
+        run: |
+          mkdir -p /tmp/downloads # Creates the download directory defined in the Python script
+
+      - name: Create Google Service Account key file
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }} # Retrieve from GitHub Secrets
+        run: |
+          echo "$GCP_SA_KEY" > service_account_key.json
+        # This file is created only during the workflow run and is NOT committed to your repository.
+
+      - name: Run RISI Palm Oil Python script
+        env:
+          # Retrieve RISI login credentials from GitHub Secrets
+          RISI_USERNAME: ${{ secrets.RISI_USERNAME }}
+          RISI_PASSWORD: ${{ secrets.RISI_PASSWORD }}
+          # Set the ChromeDriver path, matching the system installation
+          CHROMEDRIVER_PATH: /usr/bin/chromedriver
+        run: |
+          # Execute your Python script.
+          # Ensure the path is correct: if your file is in the `main/` directory, the path is `main/RISI_data_download.py`
+          python main/RISI_data_download.py
