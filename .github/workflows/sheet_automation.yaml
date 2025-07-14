@@ -28,7 +28,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install pygsheets google-colab-selenium retrying PyMuPDF==1.24.9 fitz==1.16.14 pandas requests selenium Pillow gspread gspread-dataframe
+          pip install pygsheets google-colab-selenium retrying pandas requests selenium Pillow gspread gspread-dataframe
 
       - name: Create service account key file
         env:
