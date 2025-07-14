@@ -39,6 +39,7 @@ def save_pdf(driver, path):
 def fetch_RISI_data(link):
     """启动 Selenium, 登录并下载 CSV 文件"""
     options = Options()
+    options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage') # 在 Docker/GitHub Actions 环境中推荐使用
