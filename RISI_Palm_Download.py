@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import pygsheets
-import pyperclip # <--- 新增库，用于访问剪贴板
+
 
 # --- 配置区域 ---
 # 从环境变量获取敏感信息
@@ -71,8 +71,13 @@ def get_data_from_clipboard(link):
         # 等待一小段时间确保数据已进入剪贴板
         time.sleep(2)
 
-        # 4. 从系统剪贴板读取数据
-        clipboard_text = pyperclip.paste()
+        # --- 核心改动：用 JavaScript 从浏览器直接读取剪贴板 ---
+        print("正在从浏览器内部剪贴板读取数据...")
+        clipboard_text = driver.execute_script("return navigator.clipboard.readText();")
+        
+        if not clipboard_text:
+            raise Exception("从浏览器剪贴板读取数据失败，内容为空。")
+        
         print("成功从剪贴板获取到数据。")
         return clipboard_text
 
