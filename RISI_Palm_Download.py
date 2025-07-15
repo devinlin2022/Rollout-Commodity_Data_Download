@@ -101,10 +101,7 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
-        
-        # --- THE FINAL FIX ---
-        # 1. Manually find the last row that has content.
-        # This is more reliable than using append_table().
+
         last_row = len(wks.get_all_records(head=1, empty_values=False))
         next_empty_row = last_row + 2 # +1 for header, +1 for next row
         
