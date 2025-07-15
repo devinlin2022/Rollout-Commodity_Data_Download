@@ -40,9 +40,6 @@ def scrape_table_data(link):
 
         # 1. Login
         print("Waiting for login page...")
-        time.sleep(10)
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
-        print("Find Table")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
@@ -50,6 +47,9 @@ def scrape_table_data(link):
 
         # 2. Scrape all rows from the AG-Grid table
         print("Waiting for the data grid to load...")
+        time.sleep(10)
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
+        print("Find Table")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
         print("AG-Grid container found. Extracting all row and cell data...")
