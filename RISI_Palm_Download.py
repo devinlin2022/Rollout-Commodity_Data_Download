@@ -70,13 +70,21 @@ def get_data_from_clipboard(link):
         
         # 等待一小段时间确保数据已进入剪贴板
         time.sleep(2)
-
-        # --- 核心改动：用 JavaScript 从浏览器直接读取剪贴板 ---
-        print("正在从浏览器内部剪贴板读取数据...")
-        clipboard_text = driver.execute_script("return navigator.clipboard.readText();")
         
-        if not clipboard_text:
-            raise Exception("从浏览器剪贴板读取数据失败，内容为空。")
+        # 核心改动 2: 使用 execute_async_script 来处理 Promise
+        print("正在从浏览器内部剪贴板读取数据 (使用异步脚本)...")
+        
+        js_script_to_read_clipboard = """
+            const callback = arguments[arguments.length - 1];
+            navigator.clipboard.readText()
+              .then(text => callback(text))
+              .catch(err => callback(null));
+        """
+        
+        clipboard_text = driver.execute_async_script(js_script_to_read_clipboard)
+        
+        if clipboard_text is None:
+            raise Exception("从浏览器剪贴板读取数据失败，可能权限被拒绝或发生错误。")
         
         print("成功从剪贴板获取到数据。")
         return clipboard_text
