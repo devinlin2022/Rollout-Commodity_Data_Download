@@ -36,6 +36,25 @@ def save_pdf(driver, path):
     with open(path, 'wb') as f:
         f.write(pdf_data)
 
+def wait_for_download_complete(directory, timeout=60):
+    """
+    等待下载完成的辅助函数。
+    它会检查下载目录，直到不再有 .crdownload (Chrome临时下载文件) 文件为止。
+    """
+    start_time = time.time()
+    print("正在等待文件下载完成...")
+    while time.time() - start_time < timeout:
+        # 检查目录中是否有任何以 .crdownload 结尾的文件
+        if not any(file.endswith('.crdownload') for file in os.listdir(directory)):
+            # 找到最新的一个CSV文件作为下载成功的文件
+            csv_files = [f for f in os.listdir(directory) if f.endswith('.csv')]
+            if csv_files:
+                latest_file = max([os.path.join(directory, f) for f in csv_files], key=os.path.getmtime)
+                print(f"文件下载成功: {latest_file}")
+                return latest_file
+        time.sleep(1) # 每隔1秒检查一次
+    raise Exception(f"错误：文件在 {timeout} 秒内未下载完成。")
+    
 def fetch_RISI_data(link):
     """启动 Selenium, 登录并下载 CSV 文件"""
     options = Options()
@@ -62,32 +81,39 @@ def fetch_RISI_data(link):
         driver.get(link)
         wait = WebDriverWait(driver, 60) # 增加等待时间以应对网络延迟
 
-        # 1. 登录
+        # 1. 登录 (为所有交互元素添加显式等待)
+        print("等待登录页面加载...")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
-        driver.find_element(By.CSS_SELECTOR, '#password').send_keys(RISI_PASSWORD)
-        driver.find_element(By.CSS_SELECTOR, '#login-button').click()
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
+        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
         print("登录成功...")
 
-        # 2. 点击导出菜单
-        export_menu_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Export"]')))
-        export_menu_button.click()
-        print("已点击导出菜单按钮。")
+        # 2. 点击导出菜单 (您的选择器未变)
+        print("等待并点击第一个导出相关按钮...")
+        # 等待第一个按钮出现并变为可点击状态
+        first_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button > span.mat-mdc-button-touch-target')))
+        first_button.click()
 
-        # 3. 点击下载 CSV 选项
-        download_csv_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Download as CSV')]")))
-        download_csv_button.click()
-        print("已点击 'Download as CSV'，开始下载...")
+        # 3. 点击下载 CSV 选项 (您的选择器未变)
+        print("等待并点击下载CSV选项...")
+        # 等待下载菜单项出现并变为可点击状态
+        download_option = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span")))
+        download_option.click()
+        print("下载命令已点击!")
         
-        # 可选：保存一个 PDF 快照以供调试
-        # save_pdf(driver, os.path.join(DOWNLOAD_DIR, 'snapshot_after_download_click.pdf'))
-        # print("已保存页面快照。")
+        # 4. 等待文件下载完成 (移除了 time.sleep(10))
+        # 使用新的、更可靠的函数来等待下载结束
+        wait_for_download_complete(DOWNLOAD_DIR, timeout=120) # 等待最多2分钟
 
     except Exception as e:
         print(f"在获取数据时发生错误: {e}")
         # 发生错误时截图，帮助调试
-        driver.save_screenshot(os.path.join(DOWNLOAD_DIR, 'error_screenshot.png'))
+        error_screenshot_path = os.path.join(DOWNLOAD_DIR, 'error_screenshot.png')
+        driver.save_screenshot(error_screenshot_path)
+        print(f"错误截图已保存至: {error_screenshot_path}")
         raise
     finally:
+        print("任务完成，关闭浏览器。")
         driver.quit()
 
 def wait_for_file_and_rename(old_ext=".csv", new_filename="Palm.csv", timeout=60):
@@ -158,7 +184,9 @@ def main():
     """主执行函数"""
     print("自动化任务开始...")
     # 确保下载目录存在
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    if not os.path.exists(DOWNLOAD_DIR):
+        os.makedirs(DOWNLOAD_DIR)
+        print(f"已创建下载目录: {DOWNLOAD_DIR}")
     
     # 1. 获取数据
     fetch_RISI_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
