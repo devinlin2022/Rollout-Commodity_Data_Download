@@ -60,13 +60,12 @@ def get_data_from_clipboard(link):
         print("找到表格")
         first_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button')))
         first_button.click()
-        time.sleep(2)
+        time.sleep(3)
 
         # 3. 点击复制选项 (使用您原始的定位器)
         print("等待并点击'复制'选项...")
         # 此操作会将数据复制到系统的剪贴板
-        download_option = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button")))
-        download_option.click()
+        driver.execute_script(f'document.querySelector("#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button").click()')
         print("'复制'命令已点击!")
         
         # 等待一小段时间确保数据已进入剪贴板
