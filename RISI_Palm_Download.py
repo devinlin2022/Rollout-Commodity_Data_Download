@@ -1,34 +1,29 @@
 import os
 import time
-import base64
 import pandas as pd
-import io # 用于将字符串转为文件对象
+import io 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
 import pygsheets
 
-
-# --- 配置区域 ---
-# 从环境变量获取敏感信息
+# --- Configuration ---
 RISI_USERNAME = os.getenv('RISI_USERNAME')
 RISI_PASSWORD = os.getenv('RISI_PASSWORD')
-
-# 服务账户密钥路径
 SERVICE_ACCOUNT_FILE = 'service_account_key.json'
-
-# Google Sheet 配置
 GSHEET_ID = '1Qonj5yKwHVrxApUi7_N2CJtxj61rPfULXALrY4f8lPE'
 GSHEET_TITLE = 'Palm Oil Price'
-
-# Chromedriver 路径
 CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
-DOWNLOAD_DIR = "/tmp/downloads" # 保留此项用于截图
+DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
-def get_data_from_clipboard(link):
-
+def scrape_table_data(link):
+    """
+    Logs in and scrapes the AG-Grid table directly from the page HTML.
+    This method is specifically tailored to the provided HTML structure.
+    """
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -43,116 +38,110 @@ def get_data_from_clipboard(link):
         driver.get(link)
         wait = WebDriverWait(driver, 60)
 
-        # 1. 登录 (使用您原始的定位器)
-        print("等待登录页面加载...")
+        # 1. Login
+        print("Waiting for login page...")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
-        print("登录成功...")
+        print("Login successful.")
 
-        # 2. 点击导出菜单 (使用您原始的定位器)
-        print("等待并点击第一个导出相关按钮...")
+        # 2. Precisely Scrape the AG-Grid Table
+        print("Waiting for the data grid to load...")
         time.sleep(10)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
         print("找到表格")
-        first_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button')))
-        first_button.click()
-        time.sleep(2)
+        # Locate the main grid container using its role. This is the key.
+        grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
+        grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
+        print("AG-Grid container found. Parsing headers and rows...")
 
-        # 3. 点击复制选项 (使用您原始的定位器)
-        print("等待并点击'复制'选项...")
-        # 此操作会将数据复制到系统的剪贴板
-        # second_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button")))
-        # second_button.click()
-        button_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Copy values only')]")))
-        button_to_click.click()
-        print("'复制'命令已点击!")
+        # Extract headers from elements with role="columnheader"
+        # We also filter out any empty headers (like control columns)
+        header_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="columnheader"] .ag-header-cell-text')
+        headers = [h.text for h in header_elements if h.text.strip()]
+        print(f"Found Headers: {headers}")
+
+        # Extract data from each row
+        all_rows_data = []
+        # Find all row elements. AG-Grid marks them with role="row".
+        rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
+        print(f"Found {len(rows)} data rows. Extracting cell data...")
+
+        for row in rows:
+            # Find all cells within that specific row
+            cells = row.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
+            # Extract text from each cell
+            row_data = [cell.text for cell in cells]
+
+            # The first few cells might be empty control columns, let's align data with headers
+            # We assume the meaningful data starts where the description is.
+            # A simple heuristic: find the first non-empty cell and start from there.
+            if row_data:
+                # This part may need slight adjustment based on the exact number of control columns
+                # Let's find the first cell that seems to have real data
+                first_data_index = -1
+                for i, cell_text in enumerate(row_data):
+                    if cell_text.strip(): # Find first non-empty cell
+                        first_data_index = i
+                        break
+                
+                # Slice the row data to align with headers
+                if first_data_index != -1:
+                    # The number of "real" data columns should match the number of headers
+                    # This slicing assumes control columns are at the start.
+                    aligned_row_data = row_data[first_data_index : first_data_index + len(headers)]
+                    if len(aligned_row_data) == len(headers):
+                         all_rows_data.append(aligned_row_data)
+
+        if not all_rows_data:
+             raise ValueError("Could not extract any valid data rows from the grid.")
+
+        price_df = pd.DataFrame(all_rows_data, columns=headers)
         
-        # 等待一小段时间确保数据已进入剪贴板
-        time.sleep(2)
-        
-        # 核心改动 2: 使用 execute_async_script 来处理 Promise
-        print("正在从浏览器内部剪贴板读取数据 (使用异步脚本)...")
-        
-        js_script_to_read_clipboard = """
-            const callback = arguments[arguments.length - 1];
-            navigator.clipboard.readText()
-              .then(text => callback(text))
-              .catch(err => callback(null));
-        """
-        
-        clipboard_text = driver.execute_async_script(js_script_to_read_clipboard)
-        
-        if clipboard_text is None:
-            raise Exception("从浏览器剪贴板读取数据失败，可能权限被拒绝或发生错误。")
-        
-        print("成功从剪贴板获取到数据。")
-        return clipboard_text
+        print("Successfully parsed table data.")
+        return price_df
 
     except Exception as e:
-        print(f"在获取数据时发生错误: {e}")
+        print(f"An error occurred during scraping: {e}")
         error_screenshot_path = os.path.join(DOWNLOAD_DIR, 'error_screenshot.png')
         if not os.path.exists(DOWNLOAD_DIR):
             os.makedirs(DOWNLOAD_DIR)
         driver.save_screenshot(error_screenshot_path)
-        print(f"错误截图已保存至: {error_screenshot_path}")
+        print(f"Error screenshot saved to: {error_screenshot_path}")
         raise
     finally:
-        print("任务完成，关闭浏览器。")
+        print("Closing the browser.")
         driver.quit()
 
-def update_gsheet(clipboard_text, gsheet_id, sheet_title):
-    """
-    将剪贴板文本处理后，清空并覆盖到指定的 Google Sheet。
-    """
-    if not clipboard_text or not clipboard_text.strip():
-        print("剪贴板数据为空，跳过 Google Sheet 更新。")
+def update_gsheet(dataframe, gsheet_id, sheet_title):
+    # This function remains the same
+    if dataframe is None or dataframe.empty:
+        print("DataFrame is empty. Skipping Google Sheet update.")
         return
-
     try:
-        # 将剪贴板中的文本（通常是制表符分隔）读入 Pandas DataFrame
-        # 使用 io.StringIO 可以让 pandas 直接读取字符串变量
-        data_io = io.StringIO(clipboard_text)
-        df = pd.read_csv(data_io, sep='\t') # "复制"功能通常是 tab 分隔
-        print("已将剪贴板文本解析为数据帧 (DataFrame)。")
-        print("数据预览:\n", df.head())
-        
-        # 授权并连接 Google Sheet
-        print(f"准备同步数据到 Google Sheet '{sheet_title}'...")
+        print(f"Connecting to Google Sheet '{sheet_title}'...")
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
-        print("成功连接到 Google Sheet。")
-
-        # 核心操作: 1. 清空
-        print("正在清空工作表...")
+        print("Clearing the worksheet...")
         wks.clear()
-
-        # 核心操作: 2. 写入
-        print("正在将新数据写入工作表...")
-        wks.set_dataframe(df, (1, 1), nan='') # 从 A1 单元格开始写入
-        
-        print(f"数据已成功覆盖到 Google Sheet '{sheet_title}'。")
-
+        print("Writing new data to the worksheet...")
+        wks.set_dataframe(dataframe, (1, 1), nan='')
+        print(f"Successfully overwrote data in Google Sheet '{sheet_title}'.")
     except Exception as e:
-        print(f"同步到 Google Sheet 时出错: {e}")
+        print(f"An error occurred during Google Sheet sync: {e}")
         raise
 
 def main():
-    """主执行函数"""
-    print("自动化任务开始...")
-    
-    # 1. 从网站操作并将数据复制到剪贴板
-    clipboard_content = get_data_from_clipboard('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
-    
-    # 2. 将剪贴板数据同步到 Google Sheet
+    # Main function remains the same
+    print("Automation task started...")
+    price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
     update_gsheet(
-        clipboard_text=clipboard_content,
+        dataframe=price_dataframe,
         gsheet_id=GSHEET_ID,
         sheet_title=GSHEET_TITLE
     )
-    
-    print("自动化任务成功完成！✅")
+    print("Automation task completed successfully! ✅")
 
 if __name__ == "__main__":
     main()
