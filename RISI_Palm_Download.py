@@ -21,7 +21,10 @@ CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
-    # This function is now perfect and needs no changes.
+    """
+    Logs in and scrapes the AG-Grid table using a robust method of
+    applying a fixed list of headers to the data.
+    """
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -36,12 +39,14 @@ def scrape_table_data(link):
         driver.get(link)
         wait = WebDriverWait(driver, 60)
 
+        # 1. Login
         print("Waiting for login page...")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
         print("Login successful.")
 
+        # 2. Scrape all rows from the AG-Grid table
         print("Waiting for the data grid to load...")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
@@ -87,10 +92,6 @@ def scrape_table_data(link):
         driver.quit()
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
-    """
-    Appends data to a Google Sheet. It converts the DataFrame to a 
-    simple list of lists to ensure compatibility with pygsheets.
-    """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
         return
@@ -99,10 +100,12 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
+        
         values_to_append = dataframe.values.tolist()
         
         print("Appending new data to the worksheet...")
-        wks.append_table(values=values_to_append, start='A1', overwrite=False, copy_head=False)
+        # FINAL FIX: Removed the 'copy_head=False' argument
+        wks.append_table(values=values_to_append, start='A1', overwrite=False)
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
 
@@ -111,7 +114,7 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         raise
 
 def main():
-    # This function is correct and remains the same
+    """Main execution function."""
     print("Automation task started...")
     price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
     append_to_gsheet(
