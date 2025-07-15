@@ -21,8 +21,8 @@ DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
     """
-    Logs in and scrapes the AG-Grid table. It uses the first row of
-    data as the header.
+    Logs in and scrapes the AG-Grid table, applying a predefined,
+    fixed list of headers to the data. This is the most robust method.
     """
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
@@ -49,29 +49,39 @@ def scrape_table_data(link):
         print("Waiting for the data grid to load...")
         time.sleep(10)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
-        print("Find Table")
+        print("找到表格")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
-        print("AG-Grid container found. Extracting all row and cell data...")
+        print("AG-Grid container found. Extracting all raw cell data...")
 
+        # --- FINAL LOGIC with FIXED HEADERS ---
+        # 1. Define your fixed list of headers.
+        fixed_headers = [
+            'Month', 'Crude Palm Oil Malaysia', 'RBD Palm Stearin MY',
+            'RBD Palm Kernel MY', 'Coconut Oil', 'Crude CNO', 'Tallow',
+            'Soybean Oil 1st', 'Soybean Oil 2nd', 'Soybean Oil 3rd'
+        ]
+        num_expected_columns = len(fixed_headers)
+        print(f"Using {num_expected_columns} fixed headers.")
+
+        # 2. Scrape all visible rows
         rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
-        
         all_rows_raw = []
         for row in rows:
             cells = row.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
             row_data = [cell.text for cell in cells]
-            if any(cell_text.strip() for cell_text in row_data):
-                all_rows_raw.append(row_data)
+            all_rows_raw.append(row_data)
 
-        if not all_rows_raw or len(all_rows_raw) < 2:
-            raise ValueError("Not enough rows found to create a header and data. Found {} rows.".format(len(all_rows_raw)))
+        # 3. Filter for rows that have the correct number of columns
+        data_rows = [row for row in all_rows_raw if len(row) == num_expected_columns]
 
-        # Use the first row as the header
-        headers = all_rows_raw[4]
-        data_rows = all_rows_raw[5:]
-        price_df = pd.DataFrame(data_rows, columns=headers)
+        if not data_rows:
+            raise ValueError(f"Scraping failed: No rows found with the expected {num_expected_columns} columns.")
         
-        print("Successfully created DataFrame:")
+        # 4. Create the DataFrame using the data and your fixed headers
+        price_df = pd.DataFrame(data_rows, columns=fixed_headers)
+        
+        print("Successfully created final DataFrame with fixed headers:")
         print(price_df.head())
         
         return price_df
@@ -89,9 +99,7 @@ def scrape_table_data(link):
         driver.quit()
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
-    """
-    Appends a DataFrame to the end of a Google Sheet without clearing it.
-    """
+    # This function is correct and remains the same
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
         return
@@ -101,31 +109,23 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
         
-        # This is the key change: use append_table() instead of clear() and set_dataframe()
-        # copy_head=False ensures we don't write the header row again.
         print("Appending new data to the worksheet...")
         wks.append_table(values=dataframe, start='A1', overwrite=False, copy_head=False)
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
-
     except Exception as e:
         print(f"An error occurred during Google Sheet sync: {e}")
         raise
 
 def main():
-    """Main execution function."""
+    # This function is correct and remains the same
     print("Automation task started...")
-    
-    # 1. Scrape data directly from the website table
     price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
-    
-    # 2. Append the DataFrame to the Google Sheet
     append_to_gsheet(
         dataframe=price_dataframe,
         gsheet_id=GSHEET_ID,
         sheet_title=GSHEET_TITLE
     )
-    
     print("Automation task completed successfully! ✅")
 
 if __name__ == "__main__":
