@@ -93,7 +93,7 @@ def fetch_RISI_data(link):
         # 等待第一个按钮出现并变为可点击状态
         first_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button > span.mat-mdc-button-touch-target')))
         first_button.click()
-        time.sleep(7)
+        time.sleep(10)
         # 3. 点击下载 CSV 选项 (您的选择器未变)
         print("等待并点击下载CSV选项...")
         # 等待下载菜单项出现并变为可点击状态
