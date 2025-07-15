@@ -94,14 +94,15 @@ def fetch_RISI_data(link):
         time.sleep(10)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
         print("找到表格")
-        first_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button > span.mat-mdc-button-touch-target')))        
+        first_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button')))        
         first_button.click()
         time.sleep(2)
         
         # 3. 点击下载 CSV 选项 (您的选择器未变)
         print("等待并点击下载CSV选项...")
         # 等待下载菜单项出现并变为可点击状态
-        download_option = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span")))
+        # download_option = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span")))
+        download_option = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-3 > div > div > div:nth-child(2) > fui-export-dropdown-item:nth-child(3) > button > span")))
         download_option.click()
         print("下载命令已点击!")
         
