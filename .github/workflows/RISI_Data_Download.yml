@@ -26,7 +26,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install pandas selenium pygsheets
+          pip install pandas selenium pygsheets pyperclip
 
       - name: Create temporary download directory
         run: |
