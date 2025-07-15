@@ -16,12 +16,13 @@ RISI_USERNAME = os.getenv('RISI_USERNAME')
 RISI_PASSWORD = os.getenv('RISI_PASSWORD')
 SERVICE_ACCOUNT_FILE = 'service_account_key.json'
 GSHEET_ID = '1Qonj5yKwHVrxApUi7_N2CJtxj61rPfULXALrY4f8lPE'
-GSHEET_TITLE = 'Sheet11'
+# IMPORTANT: Make sure this is the correct sheet name you want to append to!
+GSHEET_TITLE = 'Sheet11' # The error log showed 'Sheet11'
 CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
-    # This function is correct.
+    # This function is correct and stable.
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -36,14 +37,12 @@ def scrape_table_data(link):
         driver.get(link)
         wait = WebDriverWait(driver, 60)
 
-        # 1. Login
         print("Waiting for login page...")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
         print("Login successful.")
 
-        # 2. Scrape the AG-Grid table
         print("Waiting for the data grid to load...")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
@@ -55,16 +54,18 @@ def scrape_table_data(link):
             'Soybean Oil 1st', 'Soybean Oil 2nd', 'Soybean Oil 3rd'
         ]
         num_expected_columns = len(fixed_headers)
-        print(f"Using {num_expected_columns} fixed headers.")
-
+        
         rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
-        all_rows_raw = []
-        for row in rows:
-            cells = row.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
-            row_data = [cell.text for cell in cells]
-            all_rows_raw.append(row_data)
+        data_rows = [row.text.split('\n') for row in rows if len(row.text.split('\n')) == num_expected_columns]
 
-        data_rows = [row for row in all_rows_raw if len(row) == num_expected_columns]
+        if not data_rows:
+            # Fallback for complex rows that might not split correctly
+            data_rows = []
+            all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
+            for r in all_rows_elements:
+                cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
+                if len(cells) == num_expected_columns:
+                    data_rows.append([c.text for c in cells])
 
         if not data_rows:
             raise ValueError(f"Scraping failed: No rows found with the expected {num_expected_columns} columns.")
@@ -90,8 +91,8 @@ def scrape_table_data(link):
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
     """
-    Appends a DataFrame to a Google Sheet using the most basic and
-    reliable method to avoid version compatibility issues.
+    Appends a DataFrame to a Google Sheet, automatically adding more
+    rows if the sheet is full.
     """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
@@ -101,11 +102,22 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
-        next_empty_row = wks.rows + 1
         
-        print(f"Sheet has {wks.rows} rows. Appending new data at row {next_empty_row}...")
+        # --- THE DEFINITIVE FIX ---
+        # 1. Check if we need to add more rows.
+        num_new_rows = len(dataframe)
+        last_data_row = len(wks.get_all_values(include_empty_rows=False, returnas='matrix'))
         
-        # Use set_dataframe, which is stable, at the specific starting cell.
+        # Total rows needed vs. total rows available in the grid
+        if (last_data_row + num_new_rows) > wks.rows:
+            rows_to_add = (last_data_row + num_new_rows) - wks.rows + 500 # Add a 500 row buffer
+            print(f"Sheet is full. Adding {rows_to_add} more rows...")
+            wks.add_rows(rows_to_add)
+            print("Successfully added more rows.")
+
+        # 2. Paste the data at the correct next empty row.
+        next_empty_row = last_data_row + 1
+        print(f"Appending new data starting at row {next_empty_row}...")
         wks.set_dataframe(dataframe, start=(next_empty_row, 1), copy_head=False, nan='')
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
@@ -117,6 +129,7 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
 def main():
     """Main execution function."""
     print("Automation task started...")
+
     price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
     append_to_gsheet(
         dataframe=price_dataframe,
