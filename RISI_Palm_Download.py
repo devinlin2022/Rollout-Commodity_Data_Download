@@ -67,8 +67,8 @@ def scrape_table_data(link):
             raise ValueError("Not enough rows found to create a header and data. Found {} rows.".format(len(all_rows_raw)))
 
         # Use the first row as the header
-        headers = all_rows_raw[1]
-        data_rows = all_rows_raw[2:]
+        headers = all_rows_raw[4]
+        data_rows = all_rows_raw[5:]
         price_df = pd.DataFrame(data_rows, columns=headers)
         
         print("Successfully created DataFrame:")
