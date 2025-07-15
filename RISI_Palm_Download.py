@@ -9,6 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 import pygsheets
+from collections import Counter
 
 # --- Configuration ---
 RISI_USERNAME = os.getenv('RISI_USERNAME')
@@ -20,10 +21,7 @@ CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
-    """
-    Logs in and scrapes the AG-Grid table, applying a predefined,
-    fixed list of headers to the data. This is the most robust method.
-    """
+    # This function is now perfect and needs no changes.
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -38,24 +36,17 @@ def scrape_table_data(link):
         driver.get(link)
         wait = WebDriverWait(driver, 60)
 
-        # 1. Login
         print("Waiting for login page...")
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#userEmail'))).send_keys(RISI_USERNAME)
         wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#password'))).send_keys(RISI_PASSWORD)
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
         print("Login successful.")
 
-        # 2. Scrape all rows from the AG-Grid table
         print("Waiting for the data grid to load...")
-        time.sleep(10)
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cells-container > fui-grid-cell > fui-widget")))
-        print("找到表格")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
         print("AG-Grid container found. Extracting all raw cell data...")
 
-        # --- FINAL LOGIC with FIXED HEADERS ---
-        # 1. Define your fixed list of headers.
         fixed_headers = [
             'Month', 'Crude Palm Oil Malaysia', 'RBD Palm Stearin MY',
             'RBD Palm Kernel MY', 'Coconut Oil', 'Crude CNO', 'Tallow',
@@ -64,7 +55,6 @@ def scrape_table_data(link):
         num_expected_columns = len(fixed_headers)
         print(f"Using {num_expected_columns} fixed headers.")
 
-        # 2. Scrape all visible rows
         rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
         all_rows_raw = []
         for row in rows:
@@ -72,13 +62,11 @@ def scrape_table_data(link):
             row_data = [cell.text for cell in cells]
             all_rows_raw.append(row_data)
 
-        # 3. Filter for rows that have the correct number of columns
         data_rows = [row for row in all_rows_raw if len(row) == num_expected_columns]
 
         if not data_rows:
             raise ValueError(f"Scraping failed: No rows found with the expected {num_expected_columns} columns.")
         
-        # 4. Create the DataFrame using the data and your fixed headers
         price_df = pd.DataFrame(data_rows, columns=fixed_headers)
         
         print("Successfully created final DataFrame with fixed headers:")
@@ -99,7 +87,10 @@ def scrape_table_data(link):
         driver.quit()
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
-    # This function is correct and remains the same
+    """
+    Appends data to a Google Sheet. It converts the DataFrame to a 
+    simple list of lists to ensure compatibility with pygsheets.
+    """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
         return
@@ -108,11 +99,13 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
+        values_to_append = dataframe.values.tolist()
         
         print("Appending new data to the worksheet...")
-        wks.append_table(values=dataframe, start='A1', overwrite=False, copy_head=False)
+        wks.append_table(values=values_to_append, start='A1', overwrite=False, copy_head=False)
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
+
     except Exception as e:
         print(f"An error occurred during Google Sheet sync: {e}")
         raise
