@@ -16,7 +16,6 @@ RISI_USERNAME = os.getenv('RISI_USERNAME')
 RISI_PASSWORD = os.getenv('RISI_PASSWORD')
 SERVICE_ACCOUNT_FILE = 'service_account_key.json'
 GSHEET_ID = '1Qonj5yKwHVrxApUi7_N2CJtxj61rPfULXALrY4f8lPE'
-# IMPORTANT: Make sure this is the correct sheet name you want to append to!
 GSHEET_TITLE = 'Sheet11' # The error log showed 'Sheet11'
 CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
@@ -56,16 +55,12 @@ def scrape_table_data(link):
         num_expected_columns = len(fixed_headers)
         
         rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
-        data_rows = [row.text.split('\n') for row in rows if len(row.text.split('\n')) == num_expected_columns]
-
-        if not data_rows:
-            # Fallback for complex rows that might not split correctly
-            data_rows = []
-            all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
-            for r in all_rows_elements:
-                cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
-                if len(cells) == num_expected_columns:
-                    data_rows.append([c.text for c in cells])
+        data_rows = []
+        all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
+        for r in all_rows_elements:
+            cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
+            if len(cells) == num_expected_columns:
+                data_rows.append([c.text for c in cells])
 
         if not data_rows:
             raise ValueError(f"Scraping failed: No rows found with the expected {num_expected_columns} columns.")
@@ -91,8 +86,7 @@ def scrape_table_data(link):
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
     """
-    Appends a DataFrame to a Google Sheet, automatically adding more
-    rows if the sheet is full.
+    Appends a DataFrame using the most basic, version-proof method.
     """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
@@ -103,19 +97,23 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
         
-        # --- THE DEFINITIVE FIX ---
-        # 1. Check if we need to add more rows.
+        # --- THE ABSOLUTELY FINAL, MOST BASIC FIX ---
+        # 1. Get ALL values from the sheet using the most basic call possible.
+        print("Fetching all sheet values to find the last row...")
+        all_values = wks.get_all_values()
+
+        # 2. The number of rows with any data is the length of this list.
+        last_data_row = len(all_values)
+
+        # 3. Check if we need to add more rows to the grid.
         num_new_rows = len(dataframe)
-        last_data_row = len(wks.get_all_values(include_empty_rows=False, returnas='matrix'))
-        
-        # Total rows needed vs. total rows available in the grid
         if (last_data_row + num_new_rows) > wks.rows:
-            rows_to_add = (last_data_row + num_new_rows) - wks.rows + 500 # Add a 500 row buffer
+            rows_to_add = (last_data_row + num_new_rows) - wks.rows + 500
             print(f"Sheet is full. Adding {rows_to_add} more rows...")
             wks.add_rows(rows_to_add)
             print("Successfully added more rows.")
 
-        # 2. Paste the data at the correct next empty row.
+        # 4. Paste the data at the correct next empty row.
         next_empty_row = last_data_row + 1
         print(f"Appending new data starting at row {next_empty_row}...")
         wks.set_dataframe(dataframe, start=(next_empty_row, 1), copy_head=False, nan='')
@@ -129,7 +127,6 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
 def main():
     """Main execution function."""
     print("Automation task started...")
-
     price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
     append_to_gsheet(
         dataframe=price_dataframe,
