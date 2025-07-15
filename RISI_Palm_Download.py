@@ -21,10 +21,7 @@ CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
-    """
-    Logs in and scrapes the AG-Grid table using a robust method of
-    applying a fixed list of headers to the data.
-    """
+    # This function is correct.
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -46,7 +43,7 @@ def scrape_table_data(link):
         wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#login-button'))).click()
         print("Login successful.")
 
-        # 2. Scrape all rows from the AG-Grid table
+        # 2. Scrape the AG-Grid table
         print("Waiting for the data grid to load...")
         grid_selector = (By.CSS_SELECTOR, 'div[role="treegrid"]')
         grid_container = wait.until(EC.visibility_of_element_located(grid_selector))
@@ -92,6 +89,10 @@ def scrape_table_data(link):
         driver.quit()
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
+    """
+    Appends a DataFrame to a Google Sheet by finding the next empty row
+    and using set_dataframe for a direct paste. This is the most reliable method.
+    """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
         return
@@ -101,11 +102,17 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
         
-        values_to_append = dataframe.values.tolist()
+        # --- THE FINAL FIX ---
+        # 1. Manually find the last row that has content.
+        # This is more reliable than using append_table().
+        last_row = len(wks.get_all_records(head=1, empty_values=False))
+        next_empty_row = last_row + 2 # +1 for header, +1 for next row
         
-        print("Appending new data to the worksheet...")
-        # FINAL FIX: Removed the 'copy_head=False' argument
-        wks.append_table(values=values_to_append, start='A1', overwrite=False)
+        print(f"Found {last_row} existing records. Appending new data at row {next_empty_row}...")
+        
+        # 2. Use set_dataframe to paste data at the specific empty row.
+        # copy_head=False ensures we don't write the header row again.
+        wks.set_dataframe(dataframe, start=(next_empty_row, 1), copy_head=False, nan='')
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
 
