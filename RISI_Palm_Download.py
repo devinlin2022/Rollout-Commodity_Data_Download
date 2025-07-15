@@ -90,8 +90,8 @@ def scrape_table_data(link):
 
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
     """
-    Appends a DataFrame to a Google Sheet by finding the next empty row
-    and using set_dataframe for a direct paste. This is the most reliable method.
+    Appends a DataFrame to a Google Sheet using the most basic and
+    reliable method to avoid version compatibility issues.
     """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
@@ -101,14 +101,11 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         gc = pygsheets.authorize(service_file=SERVICE_ACCOUNT_FILE)
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
-
-        last_row = len(wks.get_all_records(head=1, empty_values=False))
-        next_empty_row = last_row + 2 # +1 for header, +1 for next row
+        next_empty_row = wks.rows + 1
         
-        print(f"Found {last_row} existing records. Appending new data at row {next_empty_row}...")
+        print(f"Sheet has {wks.rows} rows. Appending new data at row {next_empty_row}...")
         
-        # 2. Use set_dataframe to paste data at the specific empty row.
-        # copy_head=False ensures we don't write the header row again.
+        # Use set_dataframe, which is stable, at the specific starting cell.
         wks.set_dataframe(dataframe, start=(next_empty_row, 1), copy_head=False, nan='')
         
         print(f"Successfully appended data to Google Sheet '{sheet_title}'.")
