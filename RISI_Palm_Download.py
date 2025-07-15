@@ -62,8 +62,10 @@ def get_data_from_clipboard(link):
         # 3. 点击复制选项 (使用您原始的定位器)
         print("等待并点击'复制'选项...")
         # 此操作会将数据复制到系统的剪贴板
-        second_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button")))
-        second_button.click()
+        # second_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button")))
+        # second_button.click()
+        button_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Copy values only')]")))
+        button_to_click.click()
         print("'复制'命令已点击!")
         
         # 等待一小段时间确保数据已进入剪贴板
