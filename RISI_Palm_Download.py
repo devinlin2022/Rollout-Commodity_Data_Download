@@ -28,10 +28,7 @@ CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # 保留此项用于截图
 
 def get_data_from_clipboard(link):
-    """
-    启动 Selenium, 登录, 点击复制按钮, 并返回从系统剪贴板获取的数据。
-    【注意】此函数严格按照您的要求，使用您原始的定位器。
-    """
+
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -60,12 +57,13 @@ def get_data_from_clipboard(link):
         print("找到表格")
         first_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '#cells-container > fui-grid-cell > fui-widget > header > fui-widget-actions > div:nth-child(1) > button')))
         first_button.click()
-        time.sleep(3)
+        time.sleep(2)
 
         # 3. 点击复制选项 (使用您原始的定位器)
         print("等待并点击'复制'选项...")
         # 此操作会将数据复制到系统的剪贴板
-        driver.execute_script(f'document.querySelector("#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button").click()')
+        second_button = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#mat-menu-panel-4 > div > div > div:nth-child(1) > fui-export-dropdown-item:nth-child(3) > button")))
+        second_button.click()
         print("'复制'命令已点击!")
         
         # 等待一小段时间确保数据已进入剪贴板
