@@ -27,7 +27,7 @@ def scrape_table_data(link):
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument("window-size=3940,1080")
+    options.add_argument("--start-maximized")
 
     service = webdriver.chrome.service.Service(executable_path=CHROMEDRIVER_PATH)
     driver = webdriver.Chrome(service=service, options=options)
