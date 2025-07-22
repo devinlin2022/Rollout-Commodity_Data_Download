@@ -59,7 +59,7 @@ def scrape_table_data(link):
         all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
         for r in all_rows_elements:
             cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
-            if len(cells) == num_expected_columns:
+            if len(cells) <= num_expected_columns:
                 data_rows.append([c.text for c in cells])
 
         if not data_rows:
