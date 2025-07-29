@@ -16,7 +16,7 @@ RISI_USERNAME = os.getenv('RISI_USERNAME')
 RISI_PASSWORD = os.getenv('RISI_PASSWORD')
 SERVICE_ACCOUNT_FILE = 'service_account_key.json'
 GSHEET_ID = '1Qonj5yKwHVrxApUi7_N2CJtxj61rPfULXALrY4f8lPE'
-GSHEET_TITLE = 'Sheet11' # The error log showed 'Sheet11'
+GSHEET_TITLE = 'Sheet12' # The error log showed 'Sheet11'
 CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
