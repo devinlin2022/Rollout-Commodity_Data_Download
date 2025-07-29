@@ -1,7 +1,7 @@
 import os
 import time
 import pandas as pd
-import io 
+import io
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -21,7 +21,9 @@ CHROMEDRIVER_PATH = os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
 DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
-    # This function is correct and stable.
+    """
+    抓取原始表格数据，此函数保持不变。
+    """
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
     options.add_argument('--headless')
@@ -54,23 +56,27 @@ def scrape_table_data(link):
         ]
         num_expected_columns = len(fixed_headers)
         
-        rows = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
-        data_rows = []
+        # 这里的逻辑保持不变，它会抓取到分离的行
         all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
+        data_rows = []
         for r in all_rows_elements:
             cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
-            if len(cells) <= num_expected_columns:
+            # 过滤掉空的header行或不完整的行
+            if cells and len(cells) <= num_expected_columns:
                 data_rows.append([c.text for c in cells])
 
         if not data_rows:
-            raise ValueError(f"Scraping failed: No rows found with the expected {num_expected_columns} columns.")
+            raise ValueError("Scraping failed: No raw data rows were found.")
         
-        price_df = pd.DataFrame(data_rows, columns=fixed_headers)
+        # 创建原始的、未处理的DataFrame
+        # 注意：这里的列名只是一个临时的占位符，因为数据是错位的
+        temp_cols = [f'col_{i}' for i in range(num_expected_columns)]
+        raw_df = pd.DataFrame(data_rows, columns=temp_cols[:len(data_rows[0])])
         
-        print("Successfully created final DataFrame with fixed headers:")
-        print(price_df.head())
+        print("Successfully created raw DataFrame. It will be processed next.")
+        print(raw_df.head())
         
-        return price_df
+        return raw_df
 
     except Exception as e:
         print(f"An error occurred during scraping: {e}")
@@ -84,9 +90,56 @@ def scrape_table_data(link):
         print("Closing the browser.")
         driver.quit()
 
+def process_and_clean_data(raw_df):
+    """
+    🔧 新增函数：清理和重组DataFrame。
+    将日期行和数据行合并，并格式化日期。
+    """
+    print("Processing and cleaning the raw data...")
+    if raw_df is None or raw_df.empty:
+        print("Raw DataFrame is empty, skipping processing.")
+        return pd.DataFrame()
+
+    # 1. 计算分割点（总行数的一半）
+    num_rows = len(raw_df)
+    if num_rows % 2 != 0:
+        print(f"Warning: The number of rows ({num_rows}) is odd. Data might be incomplete.")
+        return pd.DataFrame() # 返回空表以避免后续错误
+        
+    half_point = num_rows // 2
+    
+    # 2. 提取日期部分和数据部分
+    # 日期在前半部分的第1列
+    dates = raw_df.iloc[:half_point, 0].reset_index(drop=True)
+    # 数据在后半部分，从第1列开始的所有列
+    # 因为原网站结构问题，数据行的第一列是空的，所以我们从第二列开始取
+    numeric_data = raw_df.iloc[half_point:].reset_index(drop=True)
+    
+    # 3. 将日期和数据水平合并成一个新的DataFrame
+    clean_df = pd.concat([dates, numeric_data], axis=1)
+
+    # 4. 设置正确的列名
+    clean_df.columns = [
+        'Month', 'Crude Palm Oil Malaysia', 'RBD Palm Stearin MY',
+        'RBD Palm Kernel MY', 'Coconut Oil', 'Crude CNO', 'Tallow',
+        'Soybean Oil 1st', 'Soybean Oil 2nd', 'Soybean Oil 3rd'
+    ]
+
+    # 5. 转换日期格式从 "25 Jul 2025" 到 "2025-07-25"
+    # 使用 errors='coerce' 会将任何无法转换的日期变为NaT(Not a Time)，避免程序中断
+    clean_df['Month'] = pd.to_datetime(clean_df['Month'], format='%d %b %Y', errors='coerce').dt.strftime('%Y-%m-%d')
+
+    # 删除任何因为日期转换失败而产生的空行
+    clean_df.dropna(subset=['Month'], inplace=True)
+    
+    print("Data processing complete. Final DataFrame is ready:")
+    print(clean_df.head())
+    
+    return clean_df
+
 def append_to_gsheet(dataframe, gsheet_id, sheet_title):
     """
-    Appends a DataFrame using the most basic, version-proof method.
+    将DataFrame附加到Google Sheet，此函数保持不变。
     """
     if dataframe is None or dataframe.empty:
         print("DataFrame is empty. Skipping Google Sheet update.")
@@ -97,15 +150,9 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         sh = gc.open_by_key(gsheet_id)
         wks = sh.worksheet_by_title(sheet_title)
         
-        # --- THE ABSOLUTELY FINAL, MOST BASIC FIX ---
-        # 1. Get ALL values from the sheet using the most basic call possible.
-        print("Fetching all sheet values to find the last row...")
-        all_values = wks.get_all_values()
-
-        # 2. The number of rows with any data is the length of this list.
+        all_values = wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False)
         last_data_row = len(all_values)
-
-        # 3. Check if we need to add more rows to the grid.
+        
         num_new_rows = len(dataframe)
         if (last_data_row + num_new_rows) > wks.rows:
             rows_to_add = (last_data_row + num_new_rows) - wks.rows + 500
@@ -113,7 +160,6 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
             wks.add_rows(rows_to_add)
             print("Successfully added more rows.")
 
-        # 4. Paste the data at the correct next empty row.
         next_empty_row = last_data_row + 1
         print(f"Appending new data starting at row {next_empty_row}...")
         wks.set_dataframe(dataframe, start=(next_empty_row, 1), copy_head=False, nan='')
@@ -125,11 +171,18 @@ def append_to_gsheet(dataframe, gsheet_id, sheet_title):
         raise
 
 def main():
-    """Main execution function."""
+    """主执行函数"""
     print("Automation task started...")
-    price_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
+    
+    # 步骤 1: 抓取原始的、未处理的数据
+    raw_dataframe = scrape_table_data('https://dashboard.fastmarkets.com/sw/x2TtMTTianBBefSdGCeZXc/palm-oil-global-prices')
+    
+    # 步骤 2: 清理和重组数据
+    clean_dataframe = process_and_clean_data(raw_dataframe)
+    
+    # 步骤 3: 将干净的数据上传到 Google Sheet
     append_to_gsheet(
-        dataframe=price_dataframe,
+        dataframe=clean_dataframe,
         gsheet_id=GSHEET_ID,
         sheet_title=GSHEET_TITLE
     )
