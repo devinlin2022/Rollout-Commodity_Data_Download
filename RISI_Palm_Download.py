@@ -22,7 +22,7 @@ DOWNLOAD_DIR = "/tmp/downloads" # For error screenshots
 
 def scrape_table_data(link):
     """
-    抓取原始表格数据，此函数保持不变。
+    抓取原始表格数据。
     """
     options = Options()
     options.binary_location = '/usr/bin/chromium-browser'
@@ -56,22 +56,20 @@ def scrape_table_data(link):
         ]
         num_expected_columns = len(fixed_headers)
         
-        # 这里的逻辑保持不变，它会抓取到分离的行
         all_rows_elements = grid_container.find_elements(By.CSS_SELECTOR, '[role="row"]')
         data_rows = []
         for r in all_rows_elements:
             cells = r.find_elements(By.CSS_SELECTOR, '[role="gridcell"]')
-            # 过滤掉空的header行或不完整的行
             if cells and len(cells) <= num_expected_columns:
                 data_rows.append([c.text for c in cells])
 
         if not data_rows:
             raise ValueError("Scraping failed: No raw data rows were found.")
         
-        # 创建原始的、未处理的DataFrame
-        # 注意：这里的列名只是一个临时的占位符，因为数据是错位的
-        temp_cols = [f'col_{i}' for i in range(num_expected_columns)]
-        raw_df = pd.DataFrame(data_rows, columns=temp_cols[:len(data_rows[0])])
+        # --- 核心修正 ---
+        # 不要预设列数，让Pandas自动根据最长的一行来创建DataFrame。
+        # 这样可以兼容只有1列的日期行和有多列的数值行。
+        raw_df = pd.DataFrame(data_rows)
         
         print("Successfully created raw DataFrame. It will be processed next.")
         print(raw_df.head())
