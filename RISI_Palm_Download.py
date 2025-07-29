@@ -90,7 +90,7 @@ def scrape_table_data(link):
 
 def process_and_clean_data(raw_df):
     """
-    🔧 新增函数：清理和重组DataFrame。
+    🔧 清理和重组DataFrame。
     将日期行和数据行合并，并格式化日期。
     """
     print("Processing and cleaning the raw data...")
@@ -98,36 +98,36 @@ def process_and_clean_data(raw_df):
         print("Raw DataFrame is empty, skipping processing.")
         return pd.DataFrame()
 
-    # 1. 计算分割点（总行数的一半）
     num_rows = len(raw_df)
     if num_rows % 2 != 0:
         print(f"Warning: The number of rows ({num_rows}) is odd. Data might be incomplete.")
-        return pd.DataFrame() # 返回空表以避免后续错误
+        return pd.DataFrame()
         
     half_point = num_rows // 2
     
-    # 2. 提取日期部分和数据部分
-    # 日期在前半部分的第1列
+    # 提取日期部分（前半部分的第0列）
     dates = raw_df.iloc[:half_point, 0].reset_index(drop=True)
-    # 数据在后半部分，从第1列开始的所有列
-    # 因为原网站结构问题，数据行的第一列是空的，所以我们从第二列开始取
-    numeric_data = raw_df.iloc[half_point:].reset_index(drop=True)
     
-    # 3. 将日期和数据水平合并成一个新的DataFrame
+    # --- 核心修正 ---
+    # 提取数据部分（后半部分，但从第1列开始，忽略无用的第0列）
+    # 这样 numeric_data 就只有9列了
+    numeric_data = raw_df.iloc[half_point:, 1:].reset_index(drop=True)
+    
+    # 将日期(1列)和数据(9列)水平合并，得到一个10列的DataFrame
     clean_df = pd.concat([dates, numeric_data], axis=1)
 
-    # 4. 设置正确的列名
-    clean_df.columns = [
+    # 定义包含10个元素的列名列表
+    fixed_headers = [
         'Month', 'Crude Palm Oil Malaysia', 'RBD Palm Stearin MY',
         'RBD Palm Kernel MY', 'Coconut Oil', 'Crude CNO', 'Tallow',
         'Soybean Oil 1st', 'Soybean Oil 2nd', 'Soybean Oil 3rd'
     ]
+    
+    # 现在 clean_df 是10列，fixed_headers 是10个，长度匹配
+    clean_df.columns = fixed_headers
 
-    # 5. 转换日期格式从 "25 Jul 2025" 到 "2025-07-25"
-    # 使用 errors='coerce' 会将任何无法转换的日期变为NaT(Not a Time)，避免程序中断
+    # 转换日期格式从 "28 Jul 2025" 到 "2025-07-28"
     clean_df['Month'] = pd.to_datetime(clean_df['Month'], format='%d %b %Y', errors='coerce').dt.strftime('%Y-%m-%d')
-
-    # 删除任何因为日期转换失败而产生的空行
     clean_df.dropna(subset=['Month'], inplace=True)
     
     print("Data processing complete. Final DataFrame is ready:")
