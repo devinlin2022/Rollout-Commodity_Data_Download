@@ -28,7 +28,6 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          # Removed google-colab-selenium as it's not needed for GitHub Actions
           pip install pygsheets retrying pandas requests selenium Pillow gspread gspread-dataframe pymupdf
 
       - name: Create temporary downloads directory
